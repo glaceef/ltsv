@@ -1,10 +1,9 @@
 extern crate ltsv;
-use ltsv::*;
 
 fn main() {
-    match Ltsv::from_path("sample.ltsv") {
-        Ok(map) => {
-            println!("{:?}", map);
+    match ltsv::from_path("sample.ltsv") {
+        Ok(data) => {
+            println!("{:?}", data);
         }
         Err(e) => {
             println!("{:?}", e);

@@ -1,77 +1,53 @@
 use std::path::Path;
-
 use std::io::Result;
 
-use std::collections::HashMap;
+pub type Ltsv = Vec<Record>;
+pub type Record = std::collections::HashMap<String, String>;
 
-pub struct Ltsv;
-impl Ltsv {
-    pub fn new() -> Map {
-        Map{ map: HashMap::<String, String>::new() }
-    }
+/// Load ltsv data from path.
+pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Vec<Record>> {
+    use std::fs::File;
+    use std::io::{BufReader, Read};
+    use std::iter::FromIterator;
 
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Map> {
-        use std::fs::File;
-        use std::io::{BufReader, Read};
-        use std::iter::FromIterator;
+    let file = File::open(path)?;
+    let mut reader = BufReader::new(file);
+    let mut buf = String::new();
+    let _ = reader.read_to_string(&mut buf)?;
 
-        let file = File::open(path)?;
-        let mut reader = BufReader::new(file);
-        let mut buf = String::new();
-        let _ = reader.read_to_string(&mut buf)?;
-
-        let iter = buf.trim().split("\t").map(|v|{
+    let data = buf.split("\n").map(|line|{
+        let iter = line.trim().split("\t").map(|v|{
             let split: Vec<&str> = v.splitn(2, ':').collect();
             (split[0].to_owned(), split[1].to_owned())
         });
-        Ok( Map{ map: HashMap::from_iter(iter) } )
-    }
+        Record::from_iter(iter)
+    }).collect();
 
-    pub fn over_write<P: AsRef<Path>>(path: P, map: Map) -> Result<()> {
-        let mut file = Self::from_path(path)?;
-        file.append(map);
-        Ok(())
-    }
+    Ok(data)
 }
 
-#[derive(Clone)]
-pub struct Map {
-    map: HashMap<String, String>,
-}
+/// Save as a new ltsv file.
+///
+/// # Eaxmple
+///
+/// ```
+/// let data = Ltsv::new();
+///
+/// save(data, "sample.ltsv").unwrap();
+/// ```
+pub fn save<P: AsRef<Path>>(data: Ltsv, path: P) -> Result<()> {
+    use std::fs::File;
+    use std::io::{BufWriter, Write};
 
-impl Map {
-    pub fn insert<S: Into<String>>(&mut self, tag: S, value: S) {
-        self.map.insert(tag.into(), value.into());
-    }
+    let records: Vec<String> = data.iter().map(|record|{
+        let vec: Vec<String> = record.iter().map(|(k,v)|format!("{}:{}",k,v)).collect();
+        vec.join("\t")
+    }).collect();
+    let data = records.join("\n");
 
-    pub fn get<'a, S: Into<&'a str>>(&self, key: S) -> Option<&String> {
-        self.map.get(key.into())
-    }
+    let file = File::create(path)?;
+    let mut writer = BufWriter::new(file);
+    writer.write_all(&data.into_bytes())?;
 
-    pub fn append(&mut self, map: Self) {
-        for (k, v) in map.map.into_iter() {
-            self.map.insert(k, v);
-        }
-    }
-
-    pub fn save<P: AsRef<Path>>(self, path: P) -> Result<()> {
-        use std::fs::File;
-        use std::io::{BufWriter, Write};
-
-        let vec: Vec<String> = self.map.iter().map(|(k,v)|format!("{}:{}",k,v)).collect();
-        let content = vec.join("\t");
-
-        let file = File::create(path)?;
-        let mut writer = BufWriter::new(file);
-        writer.write_all(&content.into_bytes())?;
-
-        Ok(())
-    }
-}
-
-use std::fmt;
-impl fmt::Debug for Map {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.map)
-    }
+    Ok(())
 }

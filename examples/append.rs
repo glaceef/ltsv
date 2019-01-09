@@ -1,10 +1,9 @@
 extern crate ltsv;
-use ltsv::*;
 
 fn main(){
-    let mut data = Ltsv::from_path("sample.ltsv").unwrap();
-    let d = Ltsv::from_path("sample2.ltsv").unwrap();
-    data.append(d);
+    let mut data = ltsv::from_path("sample.ltsv").unwrap();
+    let mut d = ltsv::from_path("sample2.ltsv").unwrap();
+    data.append(&mut d);
 
-    data.save("sample3.ltsv");
+    ltsv::save(data, "sample3.ltsv").unwrap();
 }
