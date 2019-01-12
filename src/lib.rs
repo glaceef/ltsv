@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::io::Result;
+use std::io::{Result, Error, ErrorKind};
 
 pub type Ltsv = Vec<Record>;
 pub type Record = std::collections::HashMap<String, String>;
@@ -14,16 +14,36 @@ pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Vec<Record>> {
     let mut reader = BufReader::new(file);
     let mut buf = String::new();
     let _ = reader.read_to_string(&mut buf)?;
+    let content = buf.trim();
 
-    let data = buf.split("\n").map(|line|{
-        let iter = line.trim().split("\t").map(|v|{
-            let split: Vec<&str> = v.splitn(2, ':').collect();
-            (split[0].to_owned(), split[1].to_owned())
+    if content.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let mut error = None;
+    let data = buf.trim().split("\n").map(|line|{
+        let _line = line.clone();
+        let iter = line.split("\t").map(|f|{
+            let _f = f.clone();
+            let split: Vec<&str> = f.splitn(2, ':').collect();
+            if error.is_none() && split.len() == 1 {
+                error = Some(Error::new(
+                    ErrorKind::Other,
+                    format!("Incorrect file format. Found line: `{}`. Found error field: `{}`", _line, _f)
+                ));
+                (String::new(), String::new())
+            } else {
+                (split[0].to_owned(), split[1].to_owned())
+            }
         });
         Record::from_iter(iter)
     }).collect();
 
-    Ok(data)
+    if let Some(error) = error {
+        Err(error)
+    } else {
+        Ok(data)
+    }
 }
 
 /// Save as a new ltsv file.
