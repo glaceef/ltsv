@@ -48,10 +48,12 @@ pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Vec<Record>> {
 
 /// Save as a new ltsv file.
 ///
-/// # Eaxmple
+/// # Example
 ///
 /// ```
 /// let data = Ltsv::new();
+/// let record = Record::new();
+/// data.push(record);
 ///
 /// save(data, "sample.ltsv").unwrap();
 /// ```
@@ -60,7 +62,8 @@ pub fn save<P: AsRef<Path>>(data: Ltsv, path: P) -> Result<()> {
     use std::io::{BufWriter, Write};
 
     let records: Vec<String> = data.iter().map(|record|{
-        let vec: Vec<String> = record.iter().map(|(k,v)|format!("{}:{}",k,v)).collect();
+        let mut vec: Vec<String> = record.iter().map(|(k,v)|format!("{}:{}",k,v)).collect();
+        vec.sort();
         vec.join("\t")
     }).collect();
     let data = records.join("\n");
