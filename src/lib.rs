@@ -1,17 +1,47 @@
 use std::path::Path;
-use std::io::{Result, Error, ErrorKind};
+use std::io::{Result as IoResult, Error, ErrorKind};
+
+use std::collections::{HashMap, VecDeque};
 
 pub type Ltsv = Vec<Record>;
-pub type Record = std::collections::HashMap<String, String>;
+
+#[derive(Debug)]
+pub struct Record {
+    map: HashMap<String, String>,
+    order: VecDeque<String>,
+}
+
+impl Record {
+    pub fn new() -> Self {
+        Record{
+            map: HashMap::new(),
+            order: VecDeque::new(),
+        }
+    }
+    pub fn insert(&mut self, label: String, value: String) -> Option<String> {
+        self.order.push_back(label.clone());
+        self.map.insert(label, value)
+    }
+}
+
+struct LtsvError(String);
+
+impl From<LtsvError> for IoResult<Ltsv> {
+    fn from(e: LtsvError) -> Self {
+        Result::Err(Error::new(
+            ErrorKind::Other,
+            e.0,
+        ))
+    }
+}
 
 /// Load ltsv data from path.
-pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Vec<Record>> {
+pub fn from_path<P: AsRef<Path>>(path: P) -> IoResult<Ltsv> {
     use std::fs::File;
     use std::io::{BufReader, Read};
     use std::iter::FromIterator;
 
-    let file = File::open(path)?;
-    let mut reader = BufReader::new(file);
+    let mut reader = BufReader::new(File::open(path)?);
     let mut buf = String::new();
     let _ = reader.read_to_string(&mut buf)?;
     let content = buf.trim();
@@ -21,29 +51,53 @@ pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Vec<Record>> {
     }
 
     let mut error = None;
-    let data = buf.trim().split("\n").map(|line|{
-        let _line = line.clone();
-        let iter = line.split("\t").map(|f|{
-            let _f = f.clone();
+    let data: Ltsv = buf.trim().split("\n").enumerate().map(|(l, line)|{
+        let mut order = VecDeque::new();
+        let iter = line.split("\t").filter_map(|f|{
             let split: Vec<&str> = f.splitn(2, ':').collect();
-            if error.is_none() && split.len() == 1 {
-                error = Some(Error::new(
-                    ErrorKind::Other,
-                    format!("Incorrect file format. Found line: `{}`. Found error field: `{}`", _line, _f)
-                ));
-                (String::new(), String::new())
-            } else {
-                (split[0].to_owned(), split[1].to_owned())
+            if split.len() == 2 {
+                let (label, value) = (split[0].to_owned(), split[1].to_owned());
+                order.push_back(label.clone());
+                return Some((label, value));
+            } else if error.is_none() {
+                error = Some(LtsvError(format!("Incorrect file format found at line`{}`", l)));
             }
+            None
         });
-        Record::from_iter(iter)
+        Record{
+            map: HashMap::from_iter(iter),
+            order
+        }
     }).collect();
 
     if let Some(error) = error {
-        Err(error)
+        error.into()
     } else {
         Ok(data)
     }
+}
+
+pub fn append<P: AsRef<Path>>(path: P, mut data: Record) -> IoResult<()> {
+    use std::fs::OpenOptions;
+    use std::io::{BufWriter, Write};
+
+    let mut record_str = vec![];
+    while let Some(label) = data.order.pop_front() {
+        if let Some(value) = data.map.remove(&label) {
+            record_str.push(format!("{}:{}", label, value))
+        }
+    }
+    let record = record_str.join("\t") + "\n";
+
+    let mut file = BufWriter::new(
+        OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?
+    );
+    file.write(record.as_bytes())?;
+
+    Ok(())
 }
 
 /// Save as a new ltsv file.
@@ -57,20 +111,27 @@ pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Vec<Record>> {
 ///
 /// save(data, "sample.ltsv").unwrap();
 /// ```
-pub fn save<P: AsRef<Path>>(data: Ltsv, path: P) -> Result<()> {
-    use std::fs::File;
+pub fn save<P: AsRef<Path>>(path: P, data: Ltsv) -> IoResult<()> {
+    use std::fs::OpenOptions;
     use std::io::{BufWriter, Write};
 
-    let records: Vec<String> = data.iter().map(|record|{
-        let mut vec: Vec<String> = record.iter().map(|(k,v)|format!("{}:{}",k,v)).collect();
-        vec.sort();
-        vec.join("\t")
-    }).collect();
-    let data = records.join("\n");
+    let mut file = BufWriter::new(
+        OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?
+    );
 
-    let file = File::create(path)?;
-    let mut writer = BufWriter::new(file);
-    writer.write_all(&data.into_bytes())?;
+    for mut d in data {
+        let mut record_str = vec![];
+        while let Some(label) = d.order.pop_front() {
+            if let Some(value) = d.map.remove(&label) {
+                record_str.push(format!("{}:{}", label, value))
+            }
+        }
+        let record = record_str.join("\t") + "\n";
+        file.write(record.as_bytes())?;
+    }
 
     Ok(())
 }

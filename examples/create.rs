@@ -16,7 +16,7 @@ fn main() {
     record.insert(String::from("age"), String::from("15"));
     data.push(record);
 
-    save(data, "sample.ltsv").unwrap();
+    save("sample.ltsv", data).unwrap();
 
     // let mut record = Record::new();
     // record.insert(String::from("date"), String::from("2019-01-03"));
