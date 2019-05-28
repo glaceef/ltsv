@@ -1,9 +1,10 @@
 extern crate ltsv;
 
 fn main(){
-    let mut data = ltsv::from_path("sample.ltsv").unwrap();
-    let mut d = ltsv::from_path("sample2.ltsv").unwrap();
-    data.append(&mut d);
+    let mut record = ltsv::Record::new();
+    record.insert(String::from("date"), String::from("2019-01-01"));
+    record.insert(String::from("user"), String::from("Alice"));
+    record.insert(String::from("age"), String::from("12"));
 
-    ltsv::save(data, "sample3.ltsv").unwrap();
+    ltsv::append("sample.ltsv", record).unwrap();
 }
